@@ -4,6 +4,85 @@ import React, { useState, useRef, useEffect } from "react"
 import type { ClassItem } from "./ClassList"
 import type { TimetableEntry } from "./ExcelReader"
 
+function AIIcon({ size = 20 }: { size?: number }) {
+  const [burst, setBurst] = useState(false)
+
+  const trigger = () => {
+    setBurst(true)
+    window.setTimeout(() => setBurst(false), 600)
+  }
+
+  return (
+    <span
+      onMouseEnter={trigger}
+      onTouchStart={trigger}
+      onClick={trigger}
+      style={{ display: "inline-flex", lineHeight: 0, cursor: "pointer" }}
+    >
+      <style>{`
+        @keyframes aiStarFloat {
+          0%, 100% { transform: translateY(0) rotate(0deg) scale(1); }
+          50% { transform: translateY(-2px) rotate(8deg) scale(1.05); }
+        }
+        @keyframes aiStarBurstBig {
+          0% { transform: scale(1) rotate(0deg); }
+          35% { transform: scale(1.35) rotate(90deg); }
+          60% { transform: scale(0.9) rotate(135deg); }
+          100% { transform: scale(1) rotate(180deg); }
+        }
+        @keyframes aiSparkleTwinkle {
+          0%, 100% { opacity: 0.35; transform: scale(0.6); }
+          50% { opacity: 1; transform: scale(1); }
+        }
+        @keyframes aiSparklePop {
+          0% { opacity: 0; transform: scale(0) translate(0, 0); }
+          40% { opacity: 1; }
+          100% { opacity: 0; transform: scale(1.2) translate(var(--tx), var(--ty)); }
+        }
+        .ai-star-main {
+          transform-origin: 50% 50%;
+          animation: aiStarFloat 2.6s ease-in-out infinite;
+        }
+        .ai-star-main.burst {
+          animation: aiStarBurstBig 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .ai-star-mini {
+          transform-origin: 50% 50%;
+          animation: aiSparkleTwinkle 1.8s ease-in-out infinite;
+        }
+        .ai-star-mini.burst {
+          animation: aiSparklePop 0.6s ease-out;
+        }
+      `}</style>
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          className={`ai-star-main${burst ? " burst" : ""}`}
+          d="M12 2L14.5 8.5L21 11L14.5 13.5L12 20L9.5 13.5L3 11L9.5 8.5L12 2Z"
+          fill="currentColor"
+        />
+        <path
+          className={`ai-star-mini${burst ? " burst" : ""}`}
+          style={{ ["--tx" as any]: "3px", ["--ty" as any]: "-4px", animationDelay: "0s" }}
+          d="M18.5 3.7L19.2 5.3L20.8 6L19.2 6.7L18.5 8.3L17.8 6.7L16.2 6L17.8 5.3L18.5 3.7Z"
+          fill="currentColor"
+        />
+        <path
+          className={`ai-star-mini${burst ? " burst" : ""}`}
+          style={{ ["--tx" as any]: "-4px", ["--ty" as any]: "3px", animationDelay: "0.3s" }}
+          d="M5.2 15.5L5.7 16.7L6.9 17.2L5.7 17.7L5.2 18.9L4.7 17.7L3.5 17.2L4.7 16.7L5.2 15.5Z"
+          fill="currentColor"
+        />
+      </svg>
+    </span>
+  )
+}
+
 interface Message {
   role: "user" | "assistant"
   content: string
@@ -89,14 +168,16 @@ function extractGroup(name: string): string {
 function buildSystemPrompt(
   uploadedData: TimetableEntry[],
   currentClasses: ClassItem[],
-  userMessage: string
+  contextText: string
 ): string {
   if (!uploadedData || uploadedData.length === 0) {
     return `You are a friendly timetable assistant for Near East University. Talk like ChatGPT — warm and natural.
 No Excel file uploaded yet. Ask the user to upload one first, then type course codes like: AII 108, MTH 201.`
   }
 
-  const codes = userMessage.match(/[A-Z]{2,4}\s*\d{3}/gi) || []
+  // Look for course codes across the recent conversation (not just this message) —
+  // so a reply like "Group A" still resolves to the course asked about earlier.
+  const codes = contextText.match(/[A-Z]{2,4}\s*\d{3}/gi) || []
   const filtered = codes.length > 0
     ? uploadedData.filter(e =>
         codes.some(code =>
@@ -154,12 +235,19 @@ Example: "AII108 A ABDELBARI" → course AII108, Group A, instructor ABDELBARI.
 Always use the FULL name exactly as shown in the data (including instructor).
 
 1. ADD COURSES — when user gives course codes:
-   - Identify all groups available for each course
-   - Tell the user which groups exist in plain text FIRST (before the JSON)
-   - Then output a JSON array (hidden from display) inside a \`\`\`json block with ALL found sessions
+   - Identify all groups available for each course from the data
+   - If a course has MORE THAN ONE group:
+       - Do NOT output a json block yet
+       - Reply in plain text listing the available groups (e.g. "AII108 has Group A (ABDELBARI) and Group B (SMITH) — which one do you want?")
+       - Wait for the user to answer before adding anything
+   - If a course has ONLY ONE group, or the user has just told you which group they want (in this message or the previous one):
+       - Reply briefly confirming what you're adding
+       - Then output EXACTLY ONE \`\`\`json code block (hidden from display) containing a SINGLE array with ONLY the sessions for that one specific group the user asked for — never include other groups they didn't ask for
    - Max 3 sessions per group
    - JSON format: [{ "name": "exact full name from data", "day": "Monday", "timeStart": "08:30", "timeEnd": "09:30", "location": "..." }]
    - Use EXACT names from the data above — do not shorten or modify them
+   - The JSON array must be valid JSON: double-quoted keys/strings, no trailing commas, no comments
+   - NEVER tell the user something was added, or say "done"/"added"/"I've added", unless your reply also contains the json block with those exact sessions in it. If you have not included the json block, do not claim the schedule was updated.
 
 2. REMOVE A COURSE — if user says "remove X", "delete X", "I don't want X":
    Output a remove block (no questions asked):
@@ -266,20 +354,50 @@ export default function AIAssistant({
       .replace(/\n{3,}/g, "\n\n")        // collapse extra blank lines
       .trim()
 
+  // Best-effort cleanup for near-valid JSON (trailing commas, smart quotes)
+  const sanitizeJsonish = (raw: string): string =>
+    raw
+      .replace(/,\s*([\]}])/g, "$1")       // trailing commas before ] or }
+      .replace(/[“”]/g, '"')                // smart double quotes
+      .replace(/[‘’]/g, "'")                // smart single quotes
+
   const parseClasses = (text: string): ClassItem[] => {
-    const m = text.match(/```json\s*([\s\S]*?)```/)
-    if (!m) return []
-    try {
-      const arr = JSON.parse(m[1])
-      if (!Array.isArray(arr)) return []
-      return arr.map((item: any) => ({
+    // Collect EVERY ```json block, not just the first — models sometimes
+    // emit one block per group when a course has multiple groups.
+    const blocks = [...text.matchAll(/```json\s*([\s\S]*?)```/g)]
+    if (blocks.length === 0) return []
+
+    const all: ClassItem[] = []
+    for (const m of blocks) {
+      let arr: any
+      try {
+        arr = JSON.parse(m[1])
+      } catch {
+        try {
+          arr = JSON.parse(sanitizeJsonish(m[1]))
+        } catch {
+          continue // skip this malformed block, keep processing the rest
+        }
+      }
+      if (!Array.isArray(arr)) continue
+      const parsed = arr.map((item: any) => ({
         name: String(item.name || "").trim(),
         day: normalizeDay(String(item.day || "")),
         timeStart: normalizeTime(String(item.timeStart || "")),
         timeEnd: normalizeTime(String(item.timeEnd || "")),
         location: String(item.location || "TBA").trim(),
       })).filter(c => c.name && c.day && c.timeStart && c.timeEnd)
-    } catch { return [] }
+      all.push(...parsed)
+    }
+
+    // De-dupe in case the same session appears in more than one block
+    const seen = new Set<string>()
+    return all.filter(c => {
+      const key = `${c.name}|${c.day}|${c.timeStart}|${c.timeEnd}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
   }
 
   const parseRemoveCourse = (text: string): string | null => {
@@ -347,6 +465,10 @@ export default function AIAssistant({
     setInput("")
     setIsLoading(true)
 
+    // Include the last few turns so a follow-up like "Group A" still
+    // resolves to whichever course was being discussed.
+    const recentContext = newMessages.slice(-6).map(m => m.content).join("\n")
+
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -354,7 +476,7 @@ export default function AIAssistant({
         body: JSON.stringify({
           model: "claude-sonnet-4-6",
           max_tokens: 1200,
-          system: buildSystemPrompt(uploadedData, currentClasses, trimmed),
+          system: buildSystemPrompt(uploadedData, currentClasses, recentContext),
           messages: newMessages.slice(-6).map(m => ({ role: m.role, content: m.content })),
         }),
       })
@@ -433,7 +555,7 @@ export default function AIAssistant({
         onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#991b1b")}
         onMouseLeave={e => (e.currentTarget.style.backgroundColor = "#7f1d1d")}
       >
-        {isOpen ? "✕" : "🤖"}
+        {isOpen ? "✕" : <AIIcon size={24} />}
         {!isOpen && clashCount > 0 && (
           <div style={{
             position: "absolute", top: "-4px", right: "-4px",
@@ -457,7 +579,7 @@ export default function AIAssistant({
         }}>
           {/* Header */}
           <div style={{ backgroundColor: "#7f1d1d", color: "white", padding: "14px 18px", display: "flex", alignItems: "center", gap: "10px" }}>
-            <span style={{ fontSize: "20px" }}>🤖</span>
+            <span style={{ display: "flex" }}><AIIcon size={20} /></span>
             <div>
               <div style={{ fontWeight: 700, fontSize: "14px" }}>AI Timetable Assistant</div>
               <div style={{ fontSize: "11px", opacity: 0.8 }}>Near East University · AII Department</div>
