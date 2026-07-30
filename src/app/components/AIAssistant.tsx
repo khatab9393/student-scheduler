@@ -92,7 +92,7 @@ interface PendingDelete {
   cls: ClassItem
 }
 
-interface AIAssistantProps {
+export interface AIAssistantProps {
   onAddClasses: (classes: ClassItem[]) => void
   onRemoveClass: (cls: ClassItem) => void
   onRemoveCourse: (courseName: string) => void
@@ -539,28 +539,28 @@ export default function AIAssistant({
   const clashCount = getAllClashes(currentClasses).length
 
   return (
-    <>
-      {/* Floating button */}
+    <div style={{ position: "relative", display: "inline-flex", flexShrink: 0 }}>
+      {/* Anchor button (inline, sits next to the search bar) */}
       <button
         onClick={() => setIsOpen(o => !o)}
         title="AI Timetable Assistant"
         style={{
-          position: "fixed", bottom: "24px", right: "24px", zIndex: 1000,
-          width: "56px", height: "56px", borderRadius: "50%",
+          position: "relative", zIndex: 1000, flexShrink: 0,
+          width: "44px", height: "44px", borderRadius: "50%",
           backgroundColor: "#7f1d1d", color: "white", border: "none",
-          cursor: "pointer", boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
+          cursor: "pointer", boxShadow: "0 4px 12px rgba(0,0,0,0.22)",
           display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: "22px", transition: "background-color 0.2s",
+          fontSize: "18px", transition: "background-color 0.2s",
         }}
         onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#991b1b")}
         onMouseLeave={e => (e.currentTarget.style.backgroundColor = "#7f1d1d")}
       >
-        {isOpen ? "✕" : <AIIcon size={24} />}
+        {isOpen ? "✕" : <AIIcon size={20} />}
         {!isOpen && clashCount > 0 && (
           <div style={{
             position: "absolute", top: "-4px", right: "-4px",
             backgroundColor: "#ef4444", color: "white", borderRadius: "50%",
-            width: "20px", height: "20px", fontSize: "11px", fontWeight: 700,
+            width: "18px", height: "18px", fontSize: "10px", fontWeight: 700,
             display: "flex", alignItems: "center", justifyContent: "center",
             border: "2px solid white",
           }}>
@@ -571,7 +571,7 @@ export default function AIAssistant({
 
       {isOpen && (
         <div style={{
-          position: "fixed", bottom: "90px", right: "24px", zIndex: 999,
+          position: "absolute", top: 0, right: "calc(100% + 10px)", zIndex: 999,
           width: "370px", maxHeight: "560px", borderRadius: "16px",
           boxShadow: "0 8px 32px rgba(0,0,0,0.18)", backgroundColor: "#fff",
           display: "flex", flexDirection: "column", overflow: "hidden",
@@ -680,6 +680,6 @@ export default function AIAssistant({
           </div>
         </div>
       )}
-    </>
+    </div>
   )
 }
