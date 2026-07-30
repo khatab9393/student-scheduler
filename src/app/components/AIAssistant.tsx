@@ -351,6 +351,8 @@ export default function AIAssistant({
       .replace(/```remove-session[\s\S]*?```/g, "")
       .replace(/```remove[\s\S]*?```/g, "")
       .replace(/```[\s\S]*?```/g, "")   // catch any other code blocks
+      .replace(/\*\*(.*?)\*\*/g, "$1")   // strip markdown bold **text**
+      .replace(/\*(.*?)\*/g, "$1")       // strip markdown italic *text*
       .replace(/\n{3,}/g, "\n\n")        // collapse extra blank lines
       .trim()
 
