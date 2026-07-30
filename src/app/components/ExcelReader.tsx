@@ -24,11 +24,63 @@ const ExcelReader: React.FC<ExcelUploadProps> = ({ onUpload }) => {
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [timetableData, setTimetableData] = useState<TimetableEntry[]>([])
   const [message, setMessage] = useState<string | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const [hasUploaded, setHasUploaded] = useState(false)
+  const dragCounter = useRef(0)
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+    await processFile(file)
+    // reset so selecting the same file again still fires onChange
+    e.target.value = ""
+  }
 
+  const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounter.current++
+    if (e.dataTransfer.items?.length) setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounter.current--
+    if (dragCounter.current <= 0) {
+      dragCounter.current = 0
+      setIsDragging(false)
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }
+
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounter.current = 0
+    setIsDragging(false)
+
+    const file = e.dataTransfer.files?.[0]
+    if (!file) return
+
+    const isExcel =
+      /\.(xlsx|xls)$/i.test(file.name) ||
+      file.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+      file.type === "application/vnd.ms-excel"
+
+    if (!isExcel) {
+      setMessage("Please drop a valid .xlsx or .xls file.")
+      return
+    }
+
+    await processFile(file)
+  }
+
+  const processFile = async (file: File) => {
     try {
       const workbook = new ExcelJS.Workbook()
       const buffer = await file.arrayBuffer()
@@ -95,6 +147,7 @@ const ExcelReader: React.FC<ExcelUploadProps> = ({ onUpload }) => {
       setTimetableData(processedData)
       useTimetableStore.getState().setTimetable(processedData)
       setMessage("upload successful.")
+      setHasUploaded(true)
 
       if (onUpload) {
         onUpload(processedData)
@@ -125,15 +178,75 @@ const ExcelReader: React.FC<ExcelUploadProps> = ({ onUpload }) => {
         onChange={handleFile}
         className="hidden"
       />
-      <button
-        onClick={() => inputRef.current?.click()}
-        className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700"
-      >
-        Upload Excel File
-      </button>
+
+      <div className="flex flex-col gap-3 items-start">
+        <button
+          onClick={() => inputRef.current?.click()}
+          className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700"
+        >
+          Upload Excel File
+        </button>
+
+        {/* Drag & drop zone — hidden once a file has been uploaded */}
+        {!hasUploaded && (
+          <div
+            onDragEnter={handleDragEnter}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={() => inputRef.current?.click()}
+            role="button"
+            tabIndex={0}
+            className="cursor-pointer flex flex-col items-center justify-center text-center transition-colors w-full"
+            style={{
+              maxWidth: "520px",
+              height: "220px",
+              borderRadius: "16px",
+              border: `2px dashed ${isDragging ? "#2563eb" : "#93c5fd"}`,
+              backgroundColor: isDragging ? "#eff6ff" : "#f8fafc",
+            }}
+          >
+            <svg
+              width="40"
+              height="40"
+              viewBox="0 0 24 24"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              style={{ marginBottom: "10px" }}
+            >
+              <path
+                d="M12 16V4M12 4L7 9M12 4l5 5"
+                stroke={isDragging ? "#2563eb" : "#3b82f6"}
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2"
+                stroke={isDragging ? "#2563eb" : "#3b82f6"}
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <p className="text-base font-medium" style={{ color: isDragging ? "#2563eb" : "#374151" }}>
+              {isDragging ? "Drop it here" : "Drag & drop your Excel file"}
+            </p>
+            <p className="text-sm text-gray-400 mt-1">.xlsx or .xls</p>
+          </div>
+        )}
+
+        {hasUploaded && (
+          <button
+            onClick={() => setHasUploaded(false)}
+            className="text-sm text-blue-600 hover:underline"
+          >
+            Upload a different file
+          </button>
+        )}
+      </div>
+
       {message && <p className="text-sm text-center">{message}</p>}
-    
-      
     </div>
   )
 }
