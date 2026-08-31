@@ -546,10 +546,11 @@ export default function AIAssistant({
 
   return (
     <div style={{ position: "relative", display: "inline-flex", flexShrink: 0 }}>
-      {/* Anchor button (inline, sits next to the search bar) */}
+      {/* Anchor button (inline on desktop; floats fixed on mobile so it's always reachable) */}
       <button
         onClick={() => setIsOpen(o => !o)}
         title="AI Timetable Assistant"
+        className="ai-assistant-anchor"
         style={{
           position: "relative", zIndex: 1000, flexShrink: 0,
           width: "44px", height: "44px", borderRadius: "50%",
@@ -575,6 +576,18 @@ export default function AIAssistant({
         )}
       </button>
 
+      <style>{`
+        @media (max-width: 640px) {
+          .ai-assistant-anchor {
+            position: fixed !important;
+            bottom: 18px !important;
+            right: 18px !important;
+            z-index: 1000 !important;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.35) !important;
+          }
+        }
+      `}</style>
+
       {isOpen && (
         <div
           className="ai-assistant-panel"
@@ -591,12 +604,12 @@ export default function AIAssistant({
               .ai-assistant-panel {
                 position: fixed !important;
                 top: auto !important;
-                bottom: 12px !important;
+                bottom: 82px !important;
                 left: 12px !important;
                 right: 12px !important;
                 width: auto !important;
                 max-width: none !important;
-                max-height: 70vh !important;
+                max-height: 65vh !important;
               }
             }
           `}</style>
