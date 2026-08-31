@@ -179,14 +179,7 @@ const ExcelReader: React.FC<ExcelUploadProps> = ({ onUpload }) => {
         className="hidden"
       />
 
-      <div className="flex flex-col gap-3 items-start">
-        <button
-          onClick={() => inputRef.current?.click()}
-          className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700"
-        >
-          Upload Excel File
-        </button>
-
+      <div className="flex flex-col gap-3 items-start w-full">
         {/* Drag & drop zone — hidden once a file has been uploaded */}
         {!hasUploaded && (
           <div

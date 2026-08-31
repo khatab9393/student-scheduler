@@ -572,13 +572,30 @@ export default function AIAssistant({
       </button>
 
       {isOpen && (
-        <div style={{
-          position: "absolute", top: 0, right: "calc(100% + 10px)", zIndex: 999,
-          width: "370px", maxHeight: "560px", borderRadius: "16px",
-          boxShadow: "0 8px 32px rgba(0,0,0,0.18)", backgroundColor: "#fff",
-          display: "flex", flexDirection: "column", overflow: "hidden",
-          border: "1px solid #e5e7eb",
-        }}>
+        <div
+          className="ai-assistant-panel"
+          style={{
+            position: "absolute", top: 0, right: "calc(100% + 10px)", zIndex: 999,
+            width: "370px", maxWidth: "min(370px, calc(100vw - 32px))", maxHeight: "560px", borderRadius: "16px",
+            boxShadow: "0 8px 32px rgba(0,0,0,0.18)", backgroundColor: "#fff",
+            display: "flex", flexDirection: "column", overflow: "hidden",
+            border: "1px solid #e5e7eb",
+          }}
+        >
+          <style>{`
+            @media (max-width: 640px) {
+              .ai-assistant-panel {
+                position: fixed !important;
+                top: auto !important;
+                bottom: 12px !important;
+                left: 12px !important;
+                right: 12px !important;
+                width: auto !important;
+                max-width: none !important;
+                max-height: 70vh !important;
+              }
+            }
+          `}</style>
           {/* Header */}
           <div style={{ backgroundColor: "#7f1d1d", color: "white", padding: "14px 18px", display: "flex", alignItems: "center", gap: "10px" }}>
             <span style={{ display: "flex" }}><AIIcon size={20} /></span>
