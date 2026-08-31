@@ -28,27 +28,27 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-gray-50 min-h-screen flex flex-col`}
       >
         {/* Sticky Header */}
-        <header className="bg-red-950 text-white py-6 sticky top-0 z-50 shadow-md">
+        <header className="bg-red-950 text-white py-6 sticky top-0 z-[1100] shadow-md">
           <div className="flex flex-col items-center px-4">
             {/* Logo Row */}
-            <div className="flex flex-row items-center gap-6 mb-4">
+            <div className="flex flex-row items-center gap-3 sm:gap-6 mb-3 sm:mb-4">
               <img
                 src="/reserch center.png"
                 alt="Logo"
-                className="h-16 w-auto"
+                className="h-10 sm:h-16 w-auto"
                 loading="lazy"
                 decoding="async"
               />
               <img 
                 src="/Ai and informatics.png" 
                 alt="Logo 2"
-                className="h-16 w-auto"
+                className="h-10 sm:h-16 w-auto"
                 loading="lazy"
                 decoding="async"
               />
             </div>
 
-            <h1 className="text-4xl sm:text-5xl font-extrabold text-center tracking-tight">
+            <h1 className="text-2xl sm:text-4xl lg:text-5xl font-extrabold text-center tracking-tight">
               Weekly Schedule
             </h1>
           </div>
