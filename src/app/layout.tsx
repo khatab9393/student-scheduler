@@ -27,8 +27,8 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-gray-50 min-h-screen flex flex-col`}
       >
-        {/* Sticky Header */}
-        <header className="bg-red-950 text-white py-6 sticky top-0 z-[1100] shadow-md">
+        {/* Header (scrolls with the page, not pinned) */}
+        <header className="bg-red-950 text-white py-6 shadow-md">
           <div className="flex flex-col items-center px-4">
             {/* Logo Row */}
             <div className="flex flex-row items-center gap-3 sm:gap-6 mb-3 sm:mb-4">
