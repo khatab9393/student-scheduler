@@ -149,19 +149,19 @@ export default function SchedulePage() {
   }, [])
 
   return (
-    <div className="flex space-x-6">
-      <div className="w-2/3">
+    <div className="flex flex-col lg:flex-row gap-6 items-start">
+      <div className="w-full lg:w-2/3 min-w-0">
         <div className="flex justify-start items-center gap-2 mb-2">
           <DownloadSchedule targetId="schedule-capture" />
         </div>
-        <div id="schedule-capture">
+        <div id="schedule-capture" className="overflow-x-auto rounded-md">
           <DndProvider backend={HTML5Backend}>
             <ScheduleTable classes={allClasses} onMoveClass={handleMoveClass} />
           </DndProvider>
         </div>
       </div>
 
-      <div className="w-1/3 space-y-6">
+      <div className="w-full lg:w-1/3 min-w-0 space-y-6">
         {warning && (
           <div
             className="text-sm text-red-600 bg-red-100 border border-red-300 rounded p-2 cursor-pointer"
@@ -188,13 +188,15 @@ export default function SchedulePage() {
           }
         />
 
-        <ClassList
-          classes={allClasses}
-          onRemove={handleRemoveClass}
-          onRemoveCourse={handleRemoveCourse}
-          onUpdate={handleUpdateClass}
-          onAdd={handleAddSingleClass}
-        />
+        <div className="bg-transparent">
+          <ClassList
+            classes={allClasses}
+            onRemove={handleRemoveClass}
+            onRemoveCourse={handleRemoveCourse}
+            onUpdate={handleUpdateClass}
+            onAdd={handleAddSingleClass}
+          />
+        </div>
 
         <div className="mt-4">
           <ExcelReader onUpload={setUploadedData} />
