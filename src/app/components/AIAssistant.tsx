@@ -245,6 +245,7 @@ Always use the FULL name exactly as shown in the data (including instructor).
        - Then output EXACTLY ONE \`\`\`json code block (hidden from display) containing a SINGLE array with ONLY the sessions for that one specific group the user asked for — never include other groups they didn't ask for
    - Max 3 sessions per group
    - JSON format: [{ "name": "exact full name from data", "day": "Monday", "timeStart": "08:30", "timeEnd": "09:30", "location": "..." }]
+   - Example: if the data shows "AII108 A ABDELBARI | Group:A | Monday | 08:30–09:30 | LAB1" AND "AII108 A ABDELBARI | Group:A | Wednesday | 10:30–11:30 | LAB1", and the user asked for AII108 group A, your json array must contain BOTH of those rows as two separate objects — not just one.
    - Use EXACT names from the data above — do not shorten or modify them
    - The JSON array must be valid JSON: double-quoted keys/strings, no trailing commas, no comments
    - NEVER tell the user something was added, or say "done"/"added"/"I've added", unless your reply also contains the json block with those exact sessions in it. If you have not included the json block, do not claim the schedule was updated.
@@ -546,6 +547,7 @@ export default function AIAssistant({
       <button
         onClick={() => setIsOpen(o => !o)}
         title="AI Timetable Assistant"
+        className="ai-assistant-anchor"
         style={{
           position: "relative", zIndex: 1000, flexShrink: 0,
           width: "44px", height: "44px", borderRadius: "50%",
@@ -570,6 +572,18 @@ export default function AIAssistant({
           </div>
         )}
       </button>
+
+      <style>{`
+        @media (max-width: 640px) {
+          .ai-assistant-anchor {
+            position: fixed !important;
+            bottom: 18px !important;
+            right: 18px !important;
+            z-index: 1000 !important;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.35) !important;
+          }
+        }
+      `}</style>
 
       {isOpen && (
         <div style={{
