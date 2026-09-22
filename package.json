@@ -11,7 +11,7 @@
   "dependencies": {
     "exceljs": "^4.4.0",
     "html-to-image": "^1.11.13",
-    "next": "15.5.4",
+    "next": "^15.5.26",
     "pdfjs-dist": "^6.3.289",
     "react": "19.1.0",
     "react-dnd": "^16.0.1",
