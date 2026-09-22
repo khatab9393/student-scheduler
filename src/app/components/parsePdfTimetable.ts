@@ -45,7 +45,7 @@
 // `group` field to TimetableEntry (see ExcelReader.tsx) to carry the group
 // name (e.g. "1AAS"), since that's this PDF's real organizing key and has
 // no equivalent in the Excel export.
-
+import type { TimetableEntry } from "./ExcelReader"
 import * as pdfjsLib from "pdfjs-dist"
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs"
