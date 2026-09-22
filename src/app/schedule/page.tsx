@@ -151,7 +151,7 @@ export default function SchedulePage() {
   return (
     <div className="flex space-x-6">
       <div className="w-2/3">
-        <div className="flex justify-start mb-2">
+        <div className="flex justify-start items-center gap-2 mb-2">
           <DownloadSchedule targetId="schedule-capture" />
         </div>
         <div id="schedule-capture">
@@ -171,6 +171,16 @@ export default function SchedulePage() {
           </div>
         )}
 
+        <div className="flex justify-end">
+          <AIAssistant
+            onAddClasses={handleAddClass}
+            onRemoveClass={handleRemoveClass}
+            onRemoveCourse={handleRemoveCourse}
+            uploadedData={uploadedData}
+            currentClasses={allClasses}
+          />
+        </div>
+
         <SearchBar
           onAdd={handleAddClass}
           filterFunction={(query) =>
@@ -184,14 +194,6 @@ export default function SchedulePage() {
           onRemoveCourse={handleRemoveCourse}
           onUpdate={handleUpdateClass}
           onAdd={handleAddSingleClass}
-        />
-
-        <AIAssistant
-          onAddClasses={handleAddClass}
-          onRemoveClass={handleRemoveClass}
-          onRemoveCourse={handleRemoveCourse}
-          uploadedData={uploadedData}
-          currentClasses={allClasses}
         />
 
         <div className="mt-4">
