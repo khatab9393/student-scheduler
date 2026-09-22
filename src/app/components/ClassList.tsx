@@ -2,6 +2,8 @@
 
 import React, { useState } from "react"
 import { isClashing } from "../utils/clashDetector"
+import SearchBar from "./SearchBar"
+import type { GroupedClass } from "../utils/FilterClasses"
 
 export interface ClassItem {
   name: string
@@ -17,6 +19,12 @@ interface ClassListProps {
   onRemoveCourse: (courseName: string) => void
   onUpdate: (oldCls: ClassItem, updatedCls: ClassItem) => void
   onAdd: (newCls: ClassItem) => void
+  // Optional — if provided, the search bar renders pinned above the class
+  // list, so it never shifts as classes are added.
+  searchBar?: {
+    onAdd: (classes: ClassItem[]) => void
+    filterFunction: (query: string) => GroupedClass[]
+  }
 }
 
 function timeDiffInMinutes(start: string, end: string): number {
@@ -49,6 +57,7 @@ export default function ClassList({
   onRemoveCourse,
   onUpdate,
   onAdd,
+  searchBar,
 }: ClassListProps) {
   const [editingKey, setEditingKey] = useState<string | null>(null)
   const [formState, setFormState] = useState<Partial<ClassItem>>({})
@@ -208,6 +217,15 @@ export default function ClassList({
 
   return (
     <div className="bg-white border border-gray-300 rounded-md p-4 shadow-sm">
+      {searchBar && (
+        <div className="mb-4">
+          <SearchBar
+            onAdd={searchBar.onAdd}
+            filterFunction={searchBar.filterFunction}
+          />
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-md font-semibold text-gray-800">Class List</h2>
         <button
