@@ -72,6 +72,7 @@ const ExcelReader: React.FC<ExcelUploadProps> = ({ onUpload }) => {
     const file = e.dataTransfer.files?.[0]
     if (!file) return
 
+<<<<<<< HEAD
     const isSupported =
       /\.(xlsx|xls|pdf)$/i.test(file.name) ||
       file.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
@@ -80,12 +81,22 @@ const ExcelReader: React.FC<ExcelUploadProps> = ({ onUpload }) => {
 
     if (!isSupported) {
       setMessage("Please drop a valid .xlsx, .xls, or .pdf file.")
+=======
+    const isExcel =
+      /\.(xlsx|xls)$/i.test(file.name) ||
+      file.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+      file.type === "application/vnd.ms-excel"
+
+    if (!isExcel) {
+      setMessage("Please drop a valid .xlsx or .xls file.")
+>>>>>>> f4c19895909b321241cd2520f88b041d216f21ed
       return
     }
 
     await processFile(file)
   }
 
+<<<<<<< HEAD
   // Dispatches to the right parser by file type. Both parsers produce the
   // same TimetableEntry[] shape, so everything below this point (store
   // update, onUpload callback, UI) doesn't need to know which one ran.
@@ -118,6 +129,9 @@ const ExcelReader: React.FC<ExcelUploadProps> = ({ onUpload }) => {
   }
 
   const processExcelFile = async (file: File) => {
+=======
+  const processFile = async (file: File) => {
+>>>>>>> f4c19895909b321241cd2520f88b041d216f21ed
     try {
       const workbook = new ExcelJS.Workbook()
       const buffer = await file.arrayBuffer()
@@ -181,7 +195,18 @@ const ExcelReader: React.FC<ExcelUploadProps> = ({ onUpload }) => {
         }
       })
 
+<<<<<<< HEAD
       finishUpload(processedData)
+=======
+      setTimetableData(processedData)
+      useTimetableStore.getState().setTimetable(processedData)
+      setMessage("upload successful.")
+      setHasUploaded(true)
+
+      if (onUpload) {
+        onUpload(processedData)
+      }
+>>>>>>> f4c19895909b321241cd2520f88b041d216f21ed
     } catch (error) {
       console.error("Excel parse error:", error)
       setMessage("Failed to read Excel file.")
@@ -209,6 +234,7 @@ const ExcelReader: React.FC<ExcelUploadProps> = ({ onUpload }) => {
         className="hidden"
       />
 
+<<<<<<< HEAD
       <div className="flex flex-col gap-3 items-start">
         <button
           onClick={() => inputRef.current?.click()}
@@ -217,6 +243,9 @@ const ExcelReader: React.FC<ExcelUploadProps> = ({ onUpload }) => {
           Upload Timetable File
         </button>
 
+=======
+      <div className="flex flex-col gap-3 items-start w-full">
+>>>>>>> f4c19895909b321241cd2520f88b041d216f21ed
         {/* Drag & drop zone — hidden once a file has been uploaded */}
         {!hasUploaded && (
           <div
@@ -260,9 +289,15 @@ const ExcelReader: React.FC<ExcelUploadProps> = ({ onUpload }) => {
               />
             </svg>
             <p className="text-base font-medium" style={{ color: isDragging ? "#2563eb" : "#374151" }}>
+<<<<<<< HEAD
               {isDragging ? "Drop it here" : "Drag & drop your timetable file"}
             </p>
             <p className="text-sm text-gray-400 mt-1">.xlsx, .xls, or .pdf</p>
+=======
+              {isDragging ? "Drop it here" : "Drag & drop your Excel file"}
+            </p>
+            <p className="text-sm text-gray-400 mt-1">.xlsx or .xls</p>
+>>>>>>> f4c19895909b321241cd2520f88b041d216f21ed
           </div>
         )}
 
