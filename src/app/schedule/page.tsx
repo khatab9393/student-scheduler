@@ -149,8 +149,8 @@ export default function SchedulePage() {
   }, [])
 
   return (
-    <div className="flex space-x-6">
-      <div className="w-2/3">
+    <div className="flex flex-col lg:flex-row gap-6 lg:gap-0 lg:space-x-6">
+      <div className="w-full lg:w-2/3">
         <div className="flex justify-start items-center gap-2 mb-2">
           <DownloadSchedule targetId="schedule-capture" />
         </div>
