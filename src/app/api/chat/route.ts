@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
+  const isTr = body.lang === "tr"
 
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -23,12 +24,14 @@ export async function POST(req: NextRequest) {
 
   if (data.error) {
     return NextResponse.json({
-      content: [{ text: "Too many requests, please wait a few seconds and try again." }]
+      content: [{ text: isTr
+        ? "Çok fazla istek gönderildi, lütfen birkaç saniye bekleyip tekrar dene."
+        : "Too many requests, please wait a few seconds and try again." }]
     })
   }
 
   // Convert OpenAI format to Anthropic format so AIAssistant.tsx works unchanged
   return NextResponse.json({
-    content: [{ text: data.choices?.[0]?.message?.content || "Something went wrong." }]
+    content: [{ text: data.choices?.[0]?.message?.content || (isTr ? "Bir şeyler ters gitti." : "Something went wrong.") }]
   })
 }

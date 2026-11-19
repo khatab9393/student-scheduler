@@ -4,6 +4,8 @@ import React, { useRef, useState } from "react"
 import ExcelJS from "exceljs"
 import { useTimetableStore } from "../store/useTimetableStore"
 import { parsePdf } from "./parsePdfTimetable"
+import { useLanguage } from "../i18n/LanguageContext"
+import type { TranslationKey } from "../i18n/translations"
 
 export type TimetableEntry = {
   Room: string
@@ -26,9 +28,11 @@ type ExcelUploadProps = {
 }
 
 const ExcelReader: React.FC<ExcelUploadProps> = ({ onUpload }) => {
+  const { t } = useLanguage()
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [timetableData, setTimetableData] = useState<TimetableEntry[]>([])
-  const [message, setMessage] = useState<string | null>(null)
+  // Stored as a translation key so the message follows the language switch
+  const [message, setMessage] = useState<TranslationKey | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [hasUploaded, setHasUploaded] = useState(false)
   const dragCounter = useRef(0)
@@ -79,7 +83,7 @@ const ExcelReader: React.FC<ExcelUploadProps> = ({ onUpload }) => {
       file.type === "application/pdf"
 
     if (!isSupported) {
-      setMessage("Please drop a valid .xlsx, .xls, or .pdf file.")
+      setMessage("msgInvalidFile")
       return
     }
 
@@ -98,7 +102,7 @@ const ExcelReader: React.FC<ExcelUploadProps> = ({ onUpload }) => {
         finishUpload(processedData)
       } catch (error) {
         console.error("PDF parse error:", error)
-        setMessage("Failed to read PDF file.")
+        setMessage("msgPdfFail")
       }
       return
     }
@@ -109,7 +113,7 @@ const ExcelReader: React.FC<ExcelUploadProps> = ({ onUpload }) => {
   const finishUpload = (processedData: TimetableEntry[]) => {
     setTimetableData(processedData)
     useTimetableStore.getState().setTimetable(processedData)
-    setMessage("upload successful.")
+    setMessage("msgUploadOk")
     setHasUploaded(true)
 
     if (onUpload) {
@@ -184,7 +188,7 @@ const ExcelReader: React.FC<ExcelUploadProps> = ({ onUpload }) => {
       finishUpload(processedData)
     } catch (error) {
       console.error("Excel parse error:", error)
-      setMessage("Failed to read Excel file.")
+      setMessage("msgExcelFail")
     }
   }
 
@@ -214,7 +218,7 @@ const ExcelReader: React.FC<ExcelUploadProps> = ({ onUpload }) => {
           onClick={() => inputRef.current?.click()}
           className="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700"
         >
-          Upload Timetable File
+          {t("uploadFile")}
         </button>
 
         {/* Drag & drop zone — hidden once a file has been uploaded */}
@@ -260,9 +264,9 @@ const ExcelReader: React.FC<ExcelUploadProps> = ({ onUpload }) => {
               />
             </svg>
             <p className="text-base font-medium" style={{ color: isDragging ? "#2563eb" : "#374151" }}>
-              {isDragging ? "Drop it here" : "Drag & drop your timetable file"}
+              {isDragging ? t("dropHere") : t("dragDrop")}
             </p>
-            <p className="text-sm text-gray-400 mt-1">.xlsx, .xls, or .pdf</p>
+            <p className="text-sm text-gray-400 mt-1">{t("fileTypes")}</p>
           </div>
         )}
 
@@ -271,12 +275,12 @@ const ExcelReader: React.FC<ExcelUploadProps> = ({ onUpload }) => {
             onClick={() => setHasUploaded(false)}
             className="text-sm text-blue-600 hover:underline"
           >
-            Upload a different file
+            {t("uploadDifferent")}
           </button>
         )}
       </div>
 
-      {message && <p className="text-sm text-center">{message}</p>}
+      {message && <p className="text-sm text-center">{t(message)}</p>}
     </div>
   )
 }

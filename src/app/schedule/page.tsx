@@ -11,30 +11,20 @@ import { filterByName } from "../utils/FilterClasses"
 import { isClashing } from "../utils/clashDetector"
 import ExcelReader, { TimetableEntry } from "../components/ExcelReader"
 import DownloadSchedule from "../components/DownloadSchedule"
-
-function normalizeDay(day: string): string {
-  if (!day) return ""
-  const d = day.trim().toLowerCase()
-  return d.charAt(0).toUpperCase() + d.slice(1)
-}
-
-function normalizeTime(time: string): string {
-  if (!time) return ""
-  const [h, m] = time.split(":")
-  return `${h.padStart(2, "0")}:${m.padStart(2, "0")}`
-}
-
-function convertToClassItems(data: TimetableEntry[]): ClassItem[] {
-  return data.map((entry) => ({
-    name: entry.name || "Unknown",
-    day: normalizeDay(entry.day || entry.Day),
-    timeStart: normalizeTime(entry.timeStart || entry.Time.split("-")[0]),
-    timeEnd: normalizeTime(entry.timeEnd || entry.Time.split("-")[1]),
-    location: entry.location || "Unknown Location",
-  }))
-}
+import { useLanguage } from "../i18n/LanguageContext"
+import { convertToClassItems } from "../utils/convertEntries"
 
 export default function SchedulePage() {
+  const { t, day: dayName } = useLanguage()
+  const clashMsg = (cls: ClassItem, conflict: ClassItem) =>
+    t("clashConflict", {
+      name: cls.name,
+      day: dayName(cls.day),
+      time: cls.timeStart,
+      other: conflict.name,
+      start: conflict.timeStart,
+      end: conflict.timeEnd,
+    })
   const [allClasses, setAllClasses] = useState<ClassItem[]>([])
   const [uploadedData, setUploadedData] = useState<TimetableEntry[]>([])
   const [warning, setWarning] = useState<string | null>(null)
@@ -70,7 +60,7 @@ export default function SchedulePage() {
         if (clashes.length > 0) {
           clashes.forEach((conflict) => {
             clashMessages.push(
-              `"${cls.name}" on ${cls.day} at ${cls.timeStart} conflicts with "${conflict.name}" (${conflict.timeStart}–${conflict.timeEnd})`
+              clashMsg(cls, conflict)
             )
           })
         }
@@ -93,7 +83,7 @@ export default function SchedulePage() {
       const clashes = isClashing(cls, allClasses)
       if (clashes.length > 0) {
         showWarning(clashes.map(
-          (conflict) => `"${cls.name}" on ${cls.day} at ${cls.timeStart} conflicts with "${conflict.name}" (${conflict.timeStart}–${conflict.timeEnd})`
+          (conflict) => clashMsg(cls, conflict)
         ).join("; "))
       }
       setAllClasses((prev) => [...prev, cls])
@@ -135,7 +125,7 @@ export default function SchedulePage() {
     const clashes = isClashing(to, allClasses, from)
     if (clashes.length > 0) {
       showWarning(clashes.map(
-        (conflict) => `"${to.name}" on ${to.day} at ${to.timeStart} conflicts with "${conflict.name}" (${conflict.timeStart}–${conflict.timeEnd})`
+        (conflict) => clashMsg(to, conflict)
       ).join("; "))
     }
     clearWarning()

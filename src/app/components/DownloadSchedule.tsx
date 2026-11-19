@@ -2,6 +2,7 @@
 
 import React from "react"
 import { toPng } from "html-to-image"
+import { useLanguage } from "../i18n/LanguageContext"
 
 interface DownloadScheduleProps {
   targetId: string
@@ -12,10 +13,11 @@ export default function DownloadSchedule({
   targetId,
   filename = "schedule.png",
 }: DownloadScheduleProps) {
+  const { t } = useLanguage()
   const handleDownload = async () => {
     const element = document.getElementById(targetId)
     if (!element) {
-      alert("Schedule area not found.")
+      alert(t("dlNotFound"))
       return
     }
 
@@ -47,11 +49,11 @@ export default function DownloadSchedule({
           newTab.document.write(
             `<html><head><title>${filename}</title></head><body style="margin:0;background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh;">` +
             `<img src="${dataUrl}" style="max-width:100%;height:auto;" alt="${filename}" />` +
-            `<p style="position:fixed;bottom:12px;left:0;right:0;text-align:center;color:#fff;font-family:sans-serif;font-size:14px;">Press and hold the image, then choose "Save Image"</p>` +
+            `<p style="position:fixed;bottom:12px;left:0;right:0;text-align:center;color:#fff;font-family:sans-serif;font-size:14px;">${t("dlHold")}</p>` +
             `</body></html>`
           )
         } else {
-          alert("Please allow pop-ups to save the schedule image.")
+          alert(t("dlPopup"))
         }
       } else {
         const link = document.createElement("a")
@@ -61,7 +63,7 @@ export default function DownloadSchedule({
       }
     } catch (error) {
       console.error("Failed to capture image:", error)
-      alert("Something went wrong while capturing the schedule.")
+      alert(t("dlError"))
     } finally {
       // Restore styles
       element.style.overflow = originalOverflow
@@ -74,7 +76,7 @@ export default function DownloadSchedule({
       onClick={handleDownload}
       className="text-sm px-4 py-2 bg-blue-600 text-white rounded shadow hover:bg-blue-700 transition"
     >
-      Download Schedule
+      {t("downloadSchedule")}
     </button>
   )
 }

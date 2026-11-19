@@ -45,10 +45,13 @@
 // `group` field to TimetableEntry (see ExcelReader.tsx) to carry the group
 // name (e.g. "1AAS"), since that's this PDF's real organizing key and has
 // no equivalent in the Excel export.
+
 import type { TimetableEntry } from "./ExcelReader"
 
 import * as pdfjsLib from "pdfjs-dist"
 
+// Next.js-compatible worker setup (the Vite-style "?url" import isn't
+// supported here). The bundler turns this new URL(...) into a real asset.
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs",
   import.meta.url
@@ -60,7 +63,6 @@ type PositionedItem = {
   y: number
   page: number
 }
-
 
 type Line = {
   y: number
@@ -80,6 +82,19 @@ const COURSE_LINE_RE = new RegExp(`^${COURSE_TOKEN}(\\+${COURSE_TOKEN})*$`)
 
 // How close two items' y-coordinates must be to count as the same line.
 const LINE_Y_TOLERANCE = 3
+
+// Length of one timetable row. The PDF prints only start labels, so the end
+// of a class = start of its last row + this. Change it if your rows are
+// not one hour long.
+const SLOT_MINUTES = 60
+
+function addMinutes(time: string, minutes: number): string {
+  const [h, m] = time.split(":").map(Number)
+  const total = h * 60 + m + minutes
+  const hh = String(Math.floor(total / 60) % 24).padStart(2, "0")
+  const mm = String(total % 60).padStart(2, "0")
+  return `${hh}:${mm}`
+}
 
 async function extractPositionedItems(file: File): Promise<PositionedItem[]> {
   const buffer = await file.arrayBuffer()
@@ -200,14 +215,27 @@ function parseTable(table: TableSection): TimetableEntry[] {
   const dayLabels = table.dayLine.items.map((item) => item.text)
   if (dayAnchors.length === 0) return []
 
-  const markers: { y: number; label: string }[] = []
+  const markers: { y: number; label: string; line: Line }[] = []
   for (const line of table.bodyLines) {
     if (line.items.length > 0 && TIME_PATTERN.test(line.items[0].text)) {
-      markers.push({ y: line.y, label: line.items[0].text })
+      markers.push({ y: line.y, label: line.items[0].text, line })
     }
   }
   if (markers.length === 0) return []
   const markerYs = markers.map((m) => m.y)
+
+  // DURATION: the PDF has no end times, but a class that lasts several
+  // hours is drawn as one merged cell. Every EMPTY cell prints "---" on its
+  // row's time-label line, so a row with no "---" in a column means that
+  // column is still covered by the class above it. Verified on the real
+  // file: of ~900 classes, ~530 span 2 rows and ~60 span 3.
+  const emptyGrid: boolean[][] = markers.map(() => dayLabels.map(() => false))
+  markers.forEach((marker, r) => {
+    marker.line.items.forEach((item, k) => {
+      if (k === 0 || item.text !== "---") return
+      emptyGrid[r][nearestIndex(item.x, dayAnchors)] = true
+    })
+  })
 
   // Bucket every item (skipping the time-label token itself) into its
   // nearest day column, in top-to-bottom / left-to-right order.
@@ -221,7 +249,8 @@ function parseTable(table: TableSection): TimetableEntry[] {
     })
   }
 
-  const entries: TimetableEntry[] = []
+  type Draft = { row: number; col: number; course: string; extraLines: string[] }
+  const drafts: Draft[] = []
 
   columnItems.forEach((items, colIndex) => {
     // Merge items on (almost) the same y back into per-column lines.
@@ -236,35 +265,50 @@ function parseTable(table: TableSection): TimetableEntry[] {
       }
     }
 
-    type Draft = { time: string; course: string; extraLines: string[] }
     let current: Draft | null = null
-
-    const flush = () => {
-      if (!current) return
-      const room = current.extraLines.length > 0 ? current.extraLines[current.extraLines.length - 1] : ""
-      entries.push({
-        Room: room,
-        Day: dayLabels[colIndex],
-        Time: current.time,
-        CourseInfo: current.course,
-        // @ts-ignore - see the `group` addition to TimetableEntry in ExcelReader.tsx
-        group: table.group,
-      })
-    }
-
     for (const { y, text } of colLines) {
       if (COURSE_LINE_RE.test(text)) {
-        flush()
-        const time = markers[nearestIndex(y, markerYs)].label
-        current = { time, course: text, extraLines: [] }
+        if (current) drafts.push(current)
+        current = { row: nearestIndex(y, markerYs), col: colIndex, course: text, extraLines: [] }
       } else if (current) {
         current.extraLines.push(text)
       }
     }
-    flush()
+    if (current) drafts.push(current)
   })
 
-  return entries
+  const startGrid: boolean[][] = markers.map(() => dayLabels.map(() => false))
+  drafts.forEach((d) => {
+    startGrid[d.row][d.col] = true
+  })
+
+  return drafts.map((d) => {
+    // Count consecutive rows this class covers: stop at an explicit "---"
+    // or at the row where another class in the same column starts.
+    let lastRow = d.row
+    while (
+      lastRow + 1 < markers.length &&
+      !emptyGrid[lastRow + 1][d.col] &&
+      !startGrid[lastRow + 1][d.col]
+    ) {
+      lastRow++
+    }
+
+    const start = markers[d.row].label
+    const end = addMinutes(markers[lastRow].label, SLOT_MINUTES)
+    const room = d.extraLines.length > 0 ? d.extraLines[d.extraLines.length - 1] : ""
+
+    return {
+      Room: room,
+      Day: dayLabels[d.col],
+      // "start-end" so the shared cleanup below splits it exactly like the
+      // Excel path does with its "08:30-09:30" style headers.
+      Time: `${start}-${end}`,
+      CourseInfo: d.course,
+      // @ts-ignore - see the `group` addition to TimetableEntry in ExcelReader.tsx
+      group: table.group,
+    }
+  })
 }
 
 export async function parsePdf(file: File): Promise<TimetableEntry[]> {
@@ -288,9 +332,11 @@ export async function parsePdf(file: File): Promise<TimetableEntry[]> {
     const dayMatch = entry.Day.match(/\(([^)]+)\)/)
     const day = dayMatch ? dayMatch[1].trim() : entry.Day.trim()
 
+    // parseTable already builds "start-end" from the merged-cell duration.
+    // The fallback only matters if a Time ever arrives without an end.
     const [timeStartRaw, timeEndRaw] = entry.Time.split("-").map((t) => t.trim())
     const timeStart = timeStartRaw || "00:00"
-    const timeEnd = timeEndRaw || "00:00"
+    const timeEnd = timeEndRaw || addMinutes(timeStart, SLOT_MINUTES)
 
     return {
       ...entry,

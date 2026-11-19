@@ -1,8 +1,15 @@
 "use client"
 
-import React, { useState, useRef, useEffect } from "react"
+import React, { useState, useRef, useEffect, useMemo } from "react"
 import type { ClassItem } from "./ClassList"
 import type { TimetableEntry } from "./ExcelReader"
+import { useLanguage } from "../i18n/LanguageContext"
+import type { Lang } from "../i18n/translations"
+import { normalizeDay } from "../utils/days"
+import {
+  buildSections, describeForPrompt, extractGroup, relevantSections, resolvePicks, splitByFamily,
+} from "../utils/sections"
+import type { RawPick, Section } from "../utils/sections"
 
 function AIIcon({ size = 20 }: { size?: number }) {
   const [burst, setBurst] = useState(false)
@@ -102,12 +109,6 @@ export interface AIAssistantProps {
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
-function normalizeDay(day: string): string {
-  if (!day) return ""
-  const d = day.trim().toLowerCase()
-  return d.charAt(0).toUpperCase() + d.slice(1)
-}
-
 function normalizeTime(time: string): string {
   if (!time) return ""
   const parts = time.trim().split(":")
@@ -135,74 +136,40 @@ function getAllClashes(classes: ClassItem[]): Array<[ClassItem, ClassItem]> {
   return result
 }
 
-/**
- * Extract a group label ONLY from patterns like:
- *   "AII108 A INSTRUCTOR"  → won't match (instructor is multiple chars)
- *   "AII108 A"             → group "A"  (single letter at end)
- *   "AII108 (B)"           → group "B"
- *   "AII108 Group C"       → group "C"
- * We deliberately do NOT match trailing instructor names (multi-char uppercase words)
- */
-function extractGroup(name: string): string {
-  // Group keyword pattern: "Group X" or "(X)"
-  const m =
-    name.match(/\bgroup\s+([A-Za-z0-9])\b/i) ||
-    name.match(/\(([A-Za-z0-9])\)/)
-  if (m) return m[1].toUpperCase()
-
-  // Single capital letter separated by space just before instructor name
-  // Pattern: CODE SINGLELETTER INSTRUCTOR  e.g. "AII108 A ABDELBARI"
-  // The group letter comes right after the course code digits
-  const parts = name.trim().split(/\s+/)
-  // parts[0] = course code like "AII108", parts[1] = possible group letter, rest = instructor
-  if (parts.length >= 3) {
-    const second = parts[1]
-    if (/^[A-Z]$/.test(second)) return second
-  }
-
-  return ""
-}
+// Words that confirm / decline the "remove this clashing class?" question.
+// Both languages are always accepted, whichever language is selected.
+const YES_WORDS = ["yes", "yes please", "do it", "sure", "ok", "okay", "remove it", "delete it", "remove", "yep", "yeah",
+  "evet", "evet lütfen", "tamam", "olur", "sil", "kaldır", "tabii", "tabi", "peki"]
+const NO_WORDS = ["no", "nope", "keep it", "cancel", "nevermind", "never mind", "nah",
+  "hayır", "hayir", "yok", "kalsın", "kalsin", "vazgeç", "vazgec", "iptal", "olmaz", "dokunma"]
 
 // ─── system prompt ───────────────────────────────────────────────────────────
 
 function buildSystemPrompt(
-  uploadedData: TimetableEntry[],
+  sections: Section[],
   currentClasses: ClassItem[],
-  contextText: string
+  contextText: string,
+  lang: Lang = "en"
 ): string {
-  if (!uploadedData || uploadedData.length === 0) {
+  // Appended to the end of the prompt so the reply language follows the EN/TR switch.
+  // The json / remove blocks must stay untouched because the app parses them.
+  const langRule = lang === "tr"
+    ? "\n\n━━━ LANGUAGE ━━━\nThe user has chosen TURKISH. Write ALL conversational text in natural, friendly Turkish (informal \"sen\" form): confirmations, group questions, clash explanations and general answers.\nDo NOT translate or change anything inside the ```json, ```remove and ```remove-session code blocks: keep the keys, exact course names, ENGLISH day names (Monday–Friday), times and locations exactly as in the data.\nKeep course codes as they are (e.g. AII108) and call groups \"Grup A\", \"Grup B\"."
+    : "\n\n━━━ LANGUAGE ━━━\nThe user has chosen ENGLISH. Write all conversational text in English, even if earlier messages were in another language."
+
+  if (sections.length === 0) {
     return `You are a friendly timetable assistant for Near East University. Talk like ChatGPT — warm and natural.
-No Excel file uploaded yet. Ask the user to upload one first, then type course codes like: AII 108, MTH 201.`
+No Excel file uploaded yet. Ask the user to upload one first, then type course codes like: AII 108, MTH 201.${langRule}`
   }
 
-  // Look for course codes across the recent conversation (not just this message) —
-  // so a reply like "Group A" still resolves to the course asked about earlier.
-  const codes = contextText.match(/[A-Z]{2,4}\s*\d{3}/gi) || []
-  const filtered = codes.length > 0
-    ? uploadedData.filter(e =>
-        codes.some(code =>
-          (e.name || e.CourseInfo || "").toLowerCase().replace(/\s/g, "").includes(
-            code.toLowerCase().replace(/\s/g, "")
-          )
-        )
-      )
-    : uploadedData.slice(0, 120)
-
-  // Build data string — include full name so AI returns exact names
-  const dataStr = filtered.map(e => {
-    const name = (e.name || e.CourseInfo || "").trim()
-    const day = normalizeDay(e.day || e.Day || "")
-    const timeStart = normalizeTime(e.timeStart || (e.Time ? e.Time.split("-")[0] : "") || "")
-    const timeEnd = normalizeTime(e.timeEnd || (e.Time ? e.Time.split("-")[1] : "") || "")
-    const location = (e.location || e.Room || "").trim()
-    const group = extractGroup(name)
-    return `${name} | Group:${group || "—"} | ${day} | ${timeStart}–${timeEnd} | ${location}`
-  }).join("\n")
+  // Only the courses the user is talking about (looked up across the recent messages,
+  // so a reply like "Group A" still resolves to the course asked about earlier)
+  const dataStr = describeForPrompt(relevantSections(sections, contextText))
 
   const scheduleSummary = currentClasses.length === 0
     ? "Schedule is empty."
     : currentClasses.map(c => {
-        const g = extractGroup(c.name)
+        const g = c.group || extractGroup(c.name)
         return `${c.name}${g ? ` [Grp ${g}]` : ""} | ${c.day} | ${c.timeStart}–${c.timeEnd}`
       }).join("\n")
 
@@ -210,8 +177,8 @@ No Excel file uploaded yet. Ask the user to upload one first, then type course c
   const clashSummary = clashes.length === 0
     ? "No clashes."
     : clashes.map(([a, b]) => {
-        const ga = extractGroup(a.name)
-        const gb = extractGroup(b.name)
+        const ga = a.group || extractGroup(a.name)
+        const gb = b.group || extractGroup(b.name)
         return `"${a.name}"${ga ? ` (Grp ${ga})` : ""} ↔ "${b.name}"${gb ? ` (Grp ${gb})` : ""} on ${a.day} ${a.timeStart}–${a.timeEnd}`
       }).join("\n")
 
@@ -224,7 +191,7 @@ ${scheduleSummary}
 ━━━ CLASH STATUS ━━━
 ${clashSummary}
 
-━━━ AVAILABLE CLASSES (name | group | day | time | location) ━━━
+━━━ AVAILABLE COURSES (each group has an [id] and ALL its sessions of the week) ━━━
 ${dataStr}
 
 ━━━ RULES ━━━
@@ -233,22 +200,20 @@ IMPORTANT: Course names in the data include instructor names like "AII108 A ABDE
 The group letter is the SINGLE CAPITAL LETTER between the course code and instructor name.
 Example: "AII108 A ABDELBARI" → course AII108, Group A, instructor ABDELBARI.
 Always use the FULL name exactly as shown in the data (including instructor).
+In PDF timetables a group can also be a student group such as 1AAS.
 
-1. ADD COURSES — when user gives course codes:
-   - Identify all groups available for each course from the data
-   - If a course has MORE THAN ONE group:
-       - Do NOT output a json block yet
-       - Reply in plain text listing the available groups (e.g. "AII108 has Group A (ABDELBARI) and Group B (SMITH) — which one do you want?")
-       - Wait for the user to answer before adding anything
-   - If a course has ONLY ONE group, or the user has just told you which group they want (in this message or the previous one):
-       - Reply briefly confirming what you're adding
-       - Then output EXACTLY ONE \`\`\`json code block (hidden from display) containing a SINGLE array with ONLY the sessions for that one specific group the user asked for — never include other groups they didn't ask for
-   - Max 3 sessions per group
-   - JSON format: [{ "name": "exact full name from data", "day": "Monday", "timeStart": "08:30", "timeEnd": "09:30", "location": "..." }]
-   - Example: if the data shows "AII108 A ABDELBARI | Group:A | Monday | 08:30–09:30 | LAB1" AND "AII108 A ABDELBARI | Group:A | Wednesday | 10:30–11:30 | LAB1", and the user asked for AII108 group A, your json array must contain BOTH of those rows as two separate objects — not just one.
-   - Use EXACT names from the data above — do not shorten or modify them
-   - The JSON array must be valid JSON: double-quoted keys/strings, no trailing commas, no comments
-   - NEVER tell the user something was added, or say "done"/"added"/"I've added", unless your reply also contains the json block with those exact sessions in it. If you have not included the json block, do not claim the schedule was updated.
+1. ADD COURSES — when the user gives one OR MORE course codes (e.g. "AII 108, MTH 201, PHY 102"):
+   - Every course in the data lists its GROUPS. Each group has an [id] and ALL of its sessions of the week.
+   - Handle ALL the courses the user mentioned in the SAME reply. Never deal with just one course and ignore the others.
+   - A course is READY if it has only ONE group, or the user already said which group they want (in this message or an earlier one). A course with MORE THAN ONE group and no choice yet is NOT READY.
+   - The user must pick exactly ONE group per course. NEVER add two groups of the same course.
+   - Put the READY courses into ONE single \`\`\`json code block (hidden from display) that contains ONLY the chosen ids, one per course, like: [{ \"id\": 12 }, { \"id\": 31 }]. Do NOT write days, times or rooms — the app adds every session of the chosen group automatically.
+   - For NOT READY courses, ask in that same reply, in ONE question, listing each course's groups with their sessions (e.g. \"AII108: Group A (ABDELBARI) Monday 08:30, Wednesday 10:30 — or Group B (SMITH) Tuesday 09:30. Which one?\"). Do not put them in the json yet. When the user answers, output the ids of all the chosen groups together in one json block.
+   - If no course is ready, do not output a json block at all.
+   - Reply briefly confirming which courses you're adding now (and which ones you're still waiting on).
+   - Use ONLY ids that appear in the data above. Never invent classes or ids.
+   - The JSON array must be valid JSON: double-quoted keys, no trailing commas, no comments
+   - NEVER tell the user something was added, or say \"done\"/\"added\"/\"I've added\", unless your reply also contains the json block with the chosen ids. If you have not included the json block, do not claim the schedule was updated.
 
 2. REMOVE A COURSE — if user says "remove X", "delete X", "I don't want X":
    Output a remove block (no questions asked):
@@ -267,7 +232,7 @@ Always use the FULL name exactly as shown in the data (including instructor).
 5. GENERAL — answer naturally.
 
 Days must be full English names: Monday Tuesday Wednesday Thursday Friday.
-Never invent classes not in the data.`
+Never invent classes not in the data.${langRule}`
 }
 
 // ─── typewriter ──────────────────────────────────────────────────────────────
@@ -322,10 +287,13 @@ export default function AIAssistant({
   uploadedData,
   currentClasses,
 }: AIAssistantProps) {
+  const { lang, t, day: dayName } = useLanguage()
+  // Every course group in the uploaded file, with all of its weekly sessions
+  const sections = useMemo(() => buildSections(uploadedData), [uploadedData])
   const [isOpen, setIsOpen] = useState(false)
   const [messages, setMessages] = useState<Message[]>([{
     role: "assistant",
-    content: "Hi 👋 Upload your Excel file, then type your course codes and I'll build your timetable!\n\nI understand groups — just say:\n\"AII 108, MTH 201\"\nand I'll show you all available groups.",
+    content: t("aiGreeting"),
   }])
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
@@ -336,6 +304,16 @@ export default function AIAssistant({
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages, isLoading])
+
+  // If the chat hasn't started yet, switch the greeting when the language changes
+  useEffect(() => {
+    setMessages(prev =>
+      prev.length === 1 && prev[0].role === "assistant"
+        ? [{ role: "assistant", content: t("aiGreeting") }]
+        : prev
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lang])
 
   const pushAssistant = (content: string) => {
     setMessages(prev => {
@@ -364,43 +342,23 @@ export default function AIAssistant({
       .replace(/[“”]/g, '"')                // smart double quotes
       .replace(/[‘’]/g, "'")                // smart single quotes
 
-  const parseClasses = (text: string): ClassItem[] => {
-    // Collect EVERY ```json block, not just the first — models sometimes
-    // emit one block per group when a course has multiple groups.
-    const blocks = [...text.matchAll(/```json\s*([\s\S]*?)```/g)]
-    if (blocks.length === 0) return []
-
-    const all: ClassItem[] = []
-    for (const m of blocks) {
-      let arr: any
+  // Reads every ```json block and returns the picks the AI made ({ id } or { name })
+  const parsePicks = (text: string): RawPick[] => {
+    const all: RawPick[] = []
+    for (const m of text.matchAll(/```json\s*([\s\S]*?)```/g)) {
+      let arr: unknown
       try {
         arr = JSON.parse(m[1])
       } catch {
         try {
           arr = JSON.parse(sanitizeJsonish(m[1]))
         } catch {
-          continue // skip this malformed block, keep processing the rest
+          continue // skip a malformed block, keep processing the rest
         }
       }
-      if (!Array.isArray(arr)) continue
-      const parsed = arr.map((item: any) => ({
-        name: String(item.name || "").trim(),
-        day: normalizeDay(String(item.day || "")),
-        timeStart: normalizeTime(String(item.timeStart || "")),
-        timeEnd: normalizeTime(String(item.timeEnd || "")),
-        location: String(item.location || "TBA").trim(),
-      })).filter(c => c.name && c.day && c.timeStart && c.timeEnd)
-      all.push(...parsed)
+      if (Array.isArray(arr)) all.push(...(arr as RawPick[]))
     }
-
-    // De-dupe in case the same session appears in more than one block
-    const seen = new Set<string>()
-    return all.filter(c => {
-      const key = `${c.name}|${c.day}|${c.timeStart}|${c.timeEnd}`
-      if (seen.has(key)) return false
-      seen.add(key)
-      return true
-    })
+    return all
   }
 
   const parseRemoveCourse = (text: string): string | null => {
@@ -428,7 +386,11 @@ export default function AIAssistant({
     const ga = extractGroup(toSuggest.name)
     const gb = extractGroup(other.name)
 
-    const msg = `⚠️ Clash detected!\n\n"${toSuggest.name}"${ga ? ` (Group ${ga})` : ""} on ${toSuggest.day} ${toSuggest.timeStart}–${toSuggest.timeEnd} overlaps with "${other.name}"${gb ? ` (Group ${gb})` : ""} on ${other.day} ${other.timeStart}–${other.timeEnd}.\n\nWould you like me to remove "${toSuggest.name}" to fix this?`
+    const grp = (g: string) => (g ? t("groupSuffix", { g }) : "")
+    const msg = t("aiClashMsg", {
+      a: toSuggest.name, ga: grp(ga), da: dayName(toSuggest.day), sa: toSuggest.timeStart, ea: toSuggest.timeEnd,
+      b: other.name, gb: grp(gb), db: dayName(other.day), sb: other.timeStart, eb: other.timeEnd,
+    })
 
     setPendingDelete({ cls: toSuggest })
     setTimeout(() => pushAssistant(msg), 400)
@@ -438,12 +400,15 @@ export default function AIAssistant({
     const trimmed = input.trim()
     if (!trimmed || isLoading) return
 
-    const lower = trimmed.toLowerCase()
+    // Turkish lower-casing differs for "I"/"İ", so check both
+    const lowers = [trimmed.toLowerCase(), trimmed.toLocaleLowerCase("tr")]
+    const matchWord = (words: string[]) =>
+      words.some(w => lowers.some(l => l === w || l.startsWith(w + " ")))
 
     // Handle yes/no for clash resolution
     if (pendingDelete) {
-      const isYes = ["yes", "yes please", "do it", "sure", "ok", "okay", "remove it", "delete it", "remove", "yep", "yeah"].some(w => lower === w || lower.startsWith(w + " "))
-      const isNo = ["no", "nope", "keep it", "cancel", "nevermind", "never mind", "nah"].some(w => lower === w || lower.startsWith(w + " "))
+      const isYes = matchWord(YES_WORDS)
+      const isNo = matchWord(NO_WORDS)
 
       if (isYes) {
         setMessages(prev => [...prev, { role: "user", content: trimmed }])
@@ -451,14 +416,14 @@ export default function AIAssistant({
         const removed = pendingDelete.cls
         onRemoveClass(removed)
         setPendingDelete(null)
-        setTimeout(() => pushAssistant(`✅ Done! "${removed.name}" has been removed. Your schedule is clash-free now 🎉`), 200)
+        setTimeout(() => pushAssistant(t("aiRemoved", { name: removed.name })), 200)
         return
       }
       if (isNo) {
         setMessages(prev => [...prev, { role: "user", content: trimmed }])
         setInput("")
         setPendingDelete(null)
-        setTimeout(() => pushAssistant("Got it! The class stays. Let me know if you need anything else."), 200)
+        setTimeout(() => pushAssistant(t("aiKept")), 200)
         return
       }
     }
@@ -478,22 +443,43 @@ export default function AIAssistant({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: "claude-sonnet-4-6",
-          max_tokens: 1200,
-          system: buildSystemPrompt(uploadedData, currentClasses, recentContext),
+          max_tokens: 2500,
+          system: buildSystemPrompt(sections, currentClasses, recentContext, lang),
+          lang,
           messages: newMessages.slice(-6).map(m => ({ role: m.role, content: m.content })),
         }),
       })
 
       const data = await res.json()
-      const fullText = data.content?.map((b: any) => b.text || "").join("") || "Sorry, something went wrong."
+      const fullText = data.content?.map((b: any) => b.text || "").join("") || t("aiSorry")
 
-      // Parse actions BEFORE cleaning text
-      const classes = parseClasses(fullText)
+      // Parse actions BEFORE cleaning text.
+      // The AI only picks WHICH group of each course; the sessions (day/time/room) come from the file.
+      const { picked, unresolved } = resolvePicks(parsePicks(fullText), sections)
+      const { ok, conflicts } = splitByFamily(picked)
+      const classes = ok.flatMap(sec => sec.rows)
       const removeCourse = parseRemoveCourse(fullText)
       const removeSession = parseRemoveSession(fullText)
 
       // Clean display text — strips ALL code blocks
-      const displayText = cleanForDisplay(fullText)
+      let displayText = cleanForDisplay(fullText)
+
+      if (conflicts.length > 0) {
+        // The AI picked two groups of one course — don't add them, ask the user to choose one
+        const sessionsOf = (sec: Section) =>
+          sec.rows.map(r => `${dayName(r.day)} ${r.timeStart}`).join(", ")
+        const question = conflicts.map(list =>
+          t("aiPickGroup", {
+            course: list[0].family,
+            options: list
+              .map(sec => `• ${t("groupWord")} ${sec.label || sec.name} (${sec.name}): ${sessionsOf(sec)}`)
+              .join("\n"),
+          })
+        ).join("\n\n")
+        displayText = (ok.length > 0 ? `${t("aiAddedNow", { list: ok.map(sec => sec.name).join(", ") })}\n\n` : "") + question
+      } else if (unresolved.length > 0 && classes.length === 0) {
+        displayText = `${displayText}\n\n${t("aiNotFound", { list: unresolved.join(", ") })}`.trim()
+      }
 
       setIsLoading(false)
       if (displayText) pushAssistant(displayText)
@@ -530,7 +516,7 @@ export default function AIAssistant({
       }
     } catch {
       setIsLoading(false)
-      pushAssistant("Something went wrong. Please try again.")
+      pushAssistant(t("aiError"))
     }
   }
 
@@ -546,7 +532,7 @@ export default function AIAssistant({
       {/* Anchor button (inline, sits next to the search bar) */}
       <button
         onClick={() => setIsOpen(o => !o)}
-        title="AI Timetable Assistant"
+        title={t("aiTitle")}
         className="ai-assistant-anchor"
         style={{
           position: "relative", zIndex: 1000, flexShrink: 0,
@@ -597,8 +583,8 @@ export default function AIAssistant({
           <div style={{ backgroundColor: "#7f1d1d", color: "white", padding: "14px 18px", display: "flex", alignItems: "center", gap: "10px" }}>
             <span style={{ display: "flex" }}><AIIcon size={20} /></span>
             <div>
-              <div style={{ fontWeight: 700, fontSize: "14px" }}>AI Timetable Assistant</div>
-              <div style={{ fontSize: "11px", opacity: 0.8 }}>Near East University · AII Department</div>
+              <div style={{ fontWeight: 700, fontSize: "14px" }}>{t("aiTitle")}</div>
+              <div style={{ fontSize: "11px", opacity: 0.8 }}>{t("aiSubtitle")}</div>
             </div>
             <div style={{ marginLeft: "auto", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }}>
               <div style={{
@@ -606,14 +592,14 @@ export default function AIAssistant({
                 backgroundColor: hasData ? "rgba(134,239,172,0.25)" : "rgba(255,255,255,0.15)",
                 color: hasData ? "#86efac" : "rgba(255,255,255,0.6)",
               }}>
-                {hasData ? `✓ ${uploadedData.length} classes` : "No file yet"}
+                {hasData ? t("aiClasses", { n: uploadedData.length }) : t("aiNoFile")}
               </div>
               {clashCount > 0 && (
                 <div style={{
                   fontSize: "10px", padding: "3px 8px", borderRadius: "20px",
                   backgroundColor: "rgba(239,68,68,0.3)", color: "#fca5a5",
                 }}>
-                  ⚠️ {clashCount} clash{clashCount > 1 ? "es" : ""}
+                  {clashCount > 1 ? t("aiClashMany", { n: clashCount }) : t("aiClashOne", { n: clashCount })}
                 </div>
               )}
             </div>
@@ -645,23 +631,23 @@ export default function AIAssistant({
                     const removed = pendingDelete.cls
                     onRemoveClass(removed)
                     setPendingDelete(null)
-                    setMessages(prev => [...prev, { role: "user", content: "Yes, remove it" }])
-                    setTimeout(() => pushAssistant(`✅ Done! "${removed.name}" has been removed. Your schedule is clash-free now 🎉`), 200)
+                    setMessages(prev => [...prev, { role: "user", content: t("aiUserYes") }])
+                    setTimeout(() => pushAssistant(t("aiRemoved", { name: removed.name })), 200)
                   }}
                   style={{ backgroundColor: "#166534", color: "white", border: "none", borderRadius: "20px", padding: "6px 16px", fontSize: "12px", cursor: "pointer", fontWeight: 600 }}
                   onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#14532d")}
                   onMouseLeave={e => (e.currentTarget.style.backgroundColor = "#166534")}
-                >✅ Yes, remove it</button>
+                >{t("aiYesRemove")}</button>
                 <button
                   onClick={() => {
                     setPendingDelete(null)
-                    setMessages(prev => [...prev, { role: "user", content: "No, keep it" }])
-                    setTimeout(() => pushAssistant("Got it! The class stays. Let me know if you need anything else."), 200)
+                    setMessages(prev => [...prev, { role: "user", content: t("aiUserNo") }])
+                    setTimeout(() => pushAssistant(t("aiKept")), 200)
                   }}
                   style={{ backgroundColor: "#6b7280", color: "white", border: "none", borderRadius: "20px", padding: "6px 16px", fontSize: "12px", cursor: "pointer", fontWeight: 600 }}
                   onMouseEnter={e => (e.currentTarget.style.backgroundColor = "#4b5563")}
                   onMouseLeave={e => (e.currentTarget.style.backgroundColor = "#6b7280")}
-                >❌ No, keep it</button>
+                >{t("aiNoKeep")}</button>
               </div>
             )}
 
@@ -674,7 +660,7 @@ export default function AIAssistant({
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={hasData ? "e.g. AII 108, MTH 201  or  remove PHY 102" : "Upload Excel file first..."}
+              placeholder={hasData ? t("aiPlaceholderData") : t("aiPlaceholderNoData")}
               rows={2}
               style={{
                 flex: 1, resize: "none", border: "1px solid #d1d5db", borderRadius: "10px",

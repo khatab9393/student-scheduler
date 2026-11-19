@@ -4,6 +4,7 @@ import React, { useState } from "react"
 import { isClashing } from "../utils/clashDetector"
 import SearchBar from "./SearchBar"
 import type { GroupedClass } from "../utils/FilterClasses"
+import { useLanguage } from "../i18n/LanguageContext"
 
 export interface ClassItem {
   name: string
@@ -11,6 +12,8 @@ export interface ClassItem {
   timeStart: string
   timeEnd: string
   location: string
+  // Which group this session belongs to (PDF student group such as "1AAS"), if the file has one
+  group?: string
 }
 
 interface ClassListProps {
@@ -59,6 +62,7 @@ export default function ClassList({
   onAdd,
   searchBar,
 }: ClassListProps) {
+  const { t, day: dayName } = useLanguage()
   const [editingKey, setEditingKey] = useState<string | null>(null)
   const [formState, setFormState] = useState<Partial<ClassItem>>({})
   const [editWarning, setEditWarning] = useState<string | null>(null)
@@ -90,31 +94,31 @@ export default function ClassList({
   const validateTimes = (start: string, end: string): string | null => {
     // Check if times are within class time range
     if (!isWithinClassTimeRange(start)) {
-      return "Start time must be between 08:30 and 17:30."
+      return t("errStartRange")
     }
 
     if (!isWithinClassTimeRange(end)) {
-      return "End time must be between 08:30 and 17:30."
+      return t("errEndRange")
     }
 
     // Ensure start time is earlier than end time
     if (start >= end) {
-      return "Start time must be earlier than end time."
+      return t("errStartBeforeEnd")
     }
 
     // Ensure the time duration is within 1 hour
     const diff = timeDiffInMinutes(start, end)
     if (diff > 60) {
-      return "Class duration cannot be more than 1 hour."
+      return t("errDuration")
     }
 
     // Check if the time is on a 30-minute interval
     if (!isValidTimeInterval(start)) {
-      return "Start time must be a valid 30-minute interval (e.g., 08:00, 08:30)."
+      return t("errStartInterval")
     }
 
     if (!isValidTimeInterval(end)) {
-      return "End time must be a valid 30-minute interval (e.g., 08:00, 08:30)."
+      return t("errEndInterval")
     }
 
     return null
@@ -142,7 +146,7 @@ export default function ClassList({
 
       const hasClash = isClashing(updated, classes, original).length > 0
       if (hasClash) {
-        setEditWarning("This class conflicts with another, but changes are allowed.")
+        setEditWarning(t("editConflict"))
       }
 
       onUpdate(original, updated)
@@ -150,7 +154,7 @@ export default function ClassList({
       setFormState({})
       setEditWarning(null)
     } else {
-      setEditWarning("Please fill in all fields.")
+      setEditWarning(t("fillAll"))
     }
   }
 
@@ -182,7 +186,7 @@ export default function ClassList({
       setNewSession({})
       setEditWarning(null)
     } else {
-      setEditWarning("Please fill in all fields for the new session.")
+      setEditWarning(t("fillAllSession"))
     }
   }
 
@@ -211,7 +215,7 @@ export default function ClassList({
       setAddingCourseMode(false)
       setEditWarning(null)
     } else {
-      setEditWarning("Please fill in all fields to add a course.")
+      setEditWarning(t("fillAllCourse"))
     }
   }
 
@@ -227,7 +231,7 @@ export default function ClassList({
       )}
 
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-md font-semibold text-gray-800">Class List</h2>
+        <h2 className="text-md font-semibold text-gray-800">{t("classList")}</h2>
         <button
           onClick={() => {
             setAddingCourseMode(true)
@@ -236,7 +240,7 @@ export default function ClassList({
           }}
           className="text-sm text-blue-600 hover:underline"
         >
-          Add Course
+          {t("addCourse")}
         </button>
       </div>
 
@@ -244,7 +248,7 @@ export default function ClassList({
         <div className="flex flex-wrap items-center gap-2 mb-4 bg-blue-50 p-2 rounded">
           <input
             type="text"
-            placeholder="Course Name"
+            placeholder={t("courseName")}
             value={newCourse.name || ""}
             onChange={(e) =>
               setNewCourse({ ...newCourse, name: e.target.value })
@@ -258,10 +262,10 @@ export default function ClassList({
             }
             className="border rounded px-2 py-1 text-xs"
           >
-            <option value="">Day</option>
+            <option value="">{t("dayLabel")}</option>
             {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"].map((d) => (
               <option key={d} value={d}>
-                {d}
+                {dayName(d)}
               </option>
             ))}
           </select>
@@ -283,7 +287,7 @@ export default function ClassList({
           />
           <input
             type="text"
-            placeholder="Location"
+            placeholder={t("location")}
             value={newCourse.location || ""}
             onChange={(e) =>
               setNewCourse({ ...newCourse, location: e.target.value })
@@ -294,7 +298,7 @@ export default function ClassList({
             className="text-green-600 hover:underline text-xs"
             onClick={handleAddNewCourse}
           >
-            Save
+            {t("save")}
           </button>
           <button
             className="text-gray-500 hover:underline text-xs"
@@ -304,7 +308,7 @@ export default function ClassList({
               setEditWarning(null)
             }}
           >
-            Cancel
+            {t("cancel")}
           </button>
           {editWarning && (
             <div className="text-red-500 text-xs w-full mt-1">
@@ -316,7 +320,7 @@ export default function ClassList({
 
       {classNames.length === 0 ? (
         <p className="text-sm text-gray-500 text-center py-6">
-          No classes to display.
+          {t("noClasses")}
         </p>
       ) : (
         <div className="space-y-4">
@@ -331,13 +335,13 @@ export default function ClassList({
                   onClick={() => setAddingCourse(name)}
                   className="ml-4 text-blue-500 hover:underline text-xs"
                 >
-                  Add Session
+                  {t("addSession")}
                 </button>
                 <button
                   onClick={() => handleRemoveCourse(name)}
                   className="ml-2 text-red-500 hover:underline text-xs"
                 >
-                  Remove All
+                  {t("removeAll")}
                 </button>
               </div>
 
@@ -366,7 +370,7 @@ export default function ClassList({
                             {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"].map(
                               (d) => (
                                 <option key={d} value={d}>
-                                  {d}
+                                  {dayName(d)}
                                 </option>
                               )
                             )}
@@ -403,13 +407,13 @@ export default function ClassList({
                               })
                             }
                             className="border rounded px-2 py-1 text-xs w-20"
-                            placeholder="Location"
+                            placeholder={t("location")}
                           />
                           <button
                             onClick={() => handleSave(cls)}
                             className="text-green-600 hover:underline text-xs"
                           >
-                            Save
+                            {t("save")}
                           </button>
                           <button
                             onClick={() => {
@@ -419,7 +423,7 @@ export default function ClassList({
                             }}
                             className="text-gray-500 hover:underline text-xs"
                           >
-                            Cancel
+                            {t("cancel")}
                           </button>
                           {editWarning && (
                             <div className="text-red-500 text-xs w-full mt-1">
@@ -430,10 +434,10 @@ export default function ClassList({
                       ) : (
                         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center w-full">
                           <div>
-                            {cls.day}, {cls.timeStart}–{cls.timeEnd} (Location: {cls.location || "(none)"})
+                            {dayName(cls.day)}, {cls.timeStart}–{cls.timeEnd} {t("locationLabel", { loc: cls.location || t("none") })}{cls.group ? ` · ${cls.group}` : ""}
                             {hasClash && (
                               <span className="text-red-600 ml-2 font-semibold">
-                                Clash detected
+                                {t("clashDetected")}
                               </span>
                             )}
                           </div>
@@ -442,13 +446,13 @@ export default function ClassList({
                               onClick={() => handleEdit(cls)}
                               className="text-blue-500 hover:underline text-xs"
                             >
-                              Edit
+                              {t("edit")}
                             </button>
                             <button
                               onClick={() => handleRemoveSession(cls)}
                               className="text-red-500 hover:underline text-xs"
                             >
-                              Remove Session
+                              {t("removeSession")}
                             </button>
                           </div>
                         </div>
@@ -466,10 +470,10 @@ export default function ClassList({
                       }
                       className="border rounded px-2 py-1 text-xs"
                     >
-                      <option value="">Day</option>
+                      <option value="">{t("dayLabel")}</option>
                       {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"].map((d) => (
                         <option key={d} value={d}>
-                          {d}
+                          {dayName(d)}
                         </option>
                       ))}
                     </select>
@@ -491,7 +495,7 @@ export default function ClassList({
                     />
                     <input
                       type="text"
-                      placeholder="Location"
+                      placeholder={t("location")}
                       value={newSession.location || ""}
                       onChange={(e) =>
                         setNewSession({ ...newSession, location: e.target.value })
@@ -502,7 +506,7 @@ export default function ClassList({
                       className="text-green-600 hover:underline text-xs"
                       onClick={() => handleAddNewSession(name)}
                     >
-                      Save
+                      {t("save")}
                     </button>
                     <button
                       className="text-gray-500 hover:underline text-xs"
@@ -512,7 +516,7 @@ export default function ClassList({
                         setEditWarning(null)
                       }}
                     >
-                      Cancel
+                      {t("cancel")}
                     </button>
                     {editWarning && (
                       <div className="text-red-500 text-xs w-full mt-1">

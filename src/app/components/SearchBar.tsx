@@ -3,6 +3,7 @@
 import React, { useState } from "react"
 import type { ClassItem } from "./ClassList"
 import type { GroupedClass } from "../utils/FilterClasses"
+import { useLanguage } from "../i18n/LanguageContext"
 
 interface SearchBarProps {
   onAdd: (classes: ClassItem[]) => void
@@ -10,6 +11,7 @@ interface SearchBarProps {
 }
 
 export default function SearchBar({ onAdd, filterFunction }: SearchBarProps) {
+  const { t } = useLanguage()
   const [query, setQuery] = useState("")
   const [results, setResults] = useState<GroupedClass[]>([])
 
@@ -38,7 +40,7 @@ export default function SearchBar({ onAdd, filterFunction }: SearchBarProps) {
         type="text"
         value={query}
         onChange={handleChange}
-        placeholder="Search for a class..."
+        placeholder={t("searchPlaceholder")}
         className="w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
       />
 
@@ -51,7 +53,7 @@ export default function SearchBar({ onAdd, filterFunction }: SearchBarProps) {
               className="cursor-pointer px-4 py-2 text-sm hover:bg-blue-50 border-b border-gray-100"
             >
               <div className="font-medium">{group.name}</div>
-              <div className="text-xs text-gray-500">{group.items.length} match(es)</div>
+              <div className="text-xs text-gray-500">{t("matches", { n: group.items.length })}</div>
             </div>
           ))}
         </div>

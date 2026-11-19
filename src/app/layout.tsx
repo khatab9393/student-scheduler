@@ -1,6 +1,8 @@
 import type { Metadata } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
 import "./globals.css"
+import { LanguageProvider } from "./i18n/LanguageContext"
+import Header from "./components/Header"
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -27,37 +29,15 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-gray-50 min-h-screen flex flex-col overflow-x-hidden`}
       >
-        {/* Header (scrolls with the page, not pinned) */}
-        <header className="bg-red-950 text-white py-6 shadow-md overflow-hidden">
-          <div className="flex flex-col items-center px-4">
-            {/* Logo Row */}
-            <div className="flex flex-row flex-wrap justify-center items-center gap-3 sm:gap-6 mb-3 sm:mb-4">
-              <img
-                src="/reserch center.png"
-                alt="Logo"
-                className="h-8 sm:h-16 w-auto max-w-[42%] sm:max-w-none object-contain"
-                loading="lazy"
-                decoding="async"
-              />
-              <img 
-                src="/Ai and informatics.png" 
-                alt="Logo 2"
-                className="h-8 sm:h-16 w-auto max-w-[42%] sm:max-w-none object-contain"
-                loading="lazy"
-                decoding="async"
-              />
-            </div>
+        <LanguageProvider>
+          {/* Header (scrolls with the page, not pinned) */}
+          <Header />
 
-            <h1 className="text-2xl sm:text-4xl lg:text-5xl font-extrabold text-center tracking-tight">
-              Weekly Schedule
-            </h1>
-          </div>
-        </header>
-
-        {/* Main content area fills all remaining vertical space, full width */}
-        <main className="flex-grow w-full px-4 py-8 sm:py-12">
-          {children}
-        </main>
+          {/* Main content area fills all remaining vertical space, full width */}
+          <main className="flex-grow w-full px-4 py-8 sm:py-12">
+            {children}
+          </main>
+        </LanguageProvider>
       </body>
     </html>
   )

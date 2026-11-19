@@ -8,10 +8,13 @@ export interface GroupedClass {
 export function filterByName(query: string, data: ClassItem[]): GroupedClass[] {
   const grouped: Record<string, ClassItem[]> = {}
 
+  const q = query.toLowerCase()
   data.forEach((cls) => {
-    if (cls.name.toLowerCase().includes(query.toLowerCase())) {
-      if (!grouped[cls.name]) grouped[cls.name] = []
-      grouped[cls.name].push(cls)
+    const label = cls.group ? `${cls.name} · ${cls.group}` : cls.name
+    if (label.toLowerCase().includes(q)) {
+      // one result per course + group, so adding it brings that group's sessions only
+      if (!grouped[label]) grouped[label] = []
+      grouped[label].push(cls)
     }
   })
 
